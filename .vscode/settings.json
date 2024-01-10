@@ -24,6 +24,7 @@
         "OKAY",
         "NOT_BOUND",
         "class",
-        "MAX_PLAYER_LEVEL"
+        "MAX_PLAYER_LEVEL",
+        "ReloadUI"
     ]
 }

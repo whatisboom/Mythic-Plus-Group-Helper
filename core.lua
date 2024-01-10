@@ -46,7 +46,19 @@ function MythicPlusGroupHelper:ConvertToRaid()
     end
   end, 1)
   -- Stop after two minutes
-  self:ScheduleTimer("CancelTimer", 120, self.ConvertToRaidTimer)
+  -- self:ScheduleTimer("CancelTimer", 120, self.ConvertToRaidTimer)
+end
+
+function MythicPlusGroupHelper:GetPlayerName(player)
+  return string.sub(player, 1, string.find(player, "-", 1, true) - 1)
+end
+
+function MythicPlusGroupHelper:IsPlayerInRaid(playerName)
+  for i=1, GetNumGroupMembers() do
+    local nameInRaid = UnitName("raid"..i)
+    return self:GetPlayerName(playerName)==nameInRaid
+  end
+  return false
 end
 
 -- A function that invites all online guild members to a raid
@@ -57,25 +69,16 @@ function MythicPlusGroupHelper:InviteGuildToRaid()
   for i = 1, numGuildMembers do
     -- Get the name, rank, online status and class of the guild member
     local name, _ , _, level, _, _, _, _, online, _, class = GetGuildRosterInfo(i)
-    -- If the guild member is online and not the player
-    if online and name ~= UnitName("player") and level == MAX_PLAYER_LEVEL then
+    local player = UnitName("player")
+    -- If the guild member is online and not the player\
+    if online and self:GetPlayerName(name) ~= player and level == MAX_PLAYER_LEVEL then
       self:Debug(d_debug, "Starting check for ".. name)
-      for j = 1, GetNumGroupMembers() do
-        local nameInRaid = GetRaidRosterInfo(j)
-        self:Debug(d_debug,"Current character in raid: " ..nameInRaid)
-        local isMatch = string.sub(name, 1, #nameInRaid)==nameInRaid
-        -- If the player is already in the raid
-        -- Should probably just register a roster change event and store a local cache but we will see how performance is
-        if isMatch then
-          self:Debug(d_debug, "Not inviting "..name.." as they are already in the group")
-          return
-        end
-      end
-      -- Invite the guild member to the raid
       if isDebug then
         -- Print a message to the chat
         self:Debug(d_debug, "Inviting " .. name .. " (" .. class .. ") to the raid")
-      else
+      end
+      if not isDebug and not self:IsPlayerInRaid(name) then
+        -- Invite the guild member to the raid
         C_PartyInfo.InviteUnit(name)
       end
     end
@@ -92,7 +95,7 @@ function MythicPlusGroupHelper:SortRaidByRoleAndRating()
   -- Create a table to store the raid members by role
   local raidMembers = {}
   -- Loop through all roles
-  for i, role in ipairs(roleOrder) do
+  for _, role in ipairs(roleOrder) do
     -- Create a subtable for each role
     self:Debug(d_debug, role)
     raidMembers[role] = {}
@@ -108,7 +111,7 @@ function MythicPlusGroupHelper:SortRaidByRoleAndRating()
     if (realm == nil) then
         realm = GetRealmName()
     end
-    local faction = factionMapping[UnitFactionGroup(name)]
+    local faction = factionMapping[UnitFactionGroup(name or "")]
     local rating = self:GetMythicRating(name, realm, faction)
     self:Debug(d_debug, "name, faction, rating: ", name, faction, rating)
     -- Insert the raid member into the table by role
@@ -136,6 +139,9 @@ function MythicPlusGroupHelper:SortRaidByRoleAndRating()
     table.sort(raidMembers[role], function(a, b) return a.rating > b.rating end)
     -- Loop through all raid members
     for k, member in ipairs(raidMembers[role]) do
+      if not member or not member.name then
+        return
+      end
       -- Assign the raid member to the current group and member index
       sortedGroups[groupIndex][memberIndex] = member
       -- Print a message to the chat
@@ -169,6 +175,10 @@ function MythicPlusGroupHelper:SortRaidByRoleAndRating()
 end
 
 function MythicPlusGroupHelper:GetMythicRating(name, realm, faction)
+  if not RaiderIO then
+    self:Debug(d_warn, "Please insteall the raider.io addon")
+    return 0
+  end
   local profile = RaiderIO.GetProfile(name, realm, faction)
   if (profile) then
     return profile.mythicKeystoneProfile.currentScore
@@ -195,6 +205,7 @@ function MythicPlusGroupHelper:DumpTable(table)
   end
   for k, v in pairs(table) do
     if type(v == "table") then
+      self:Debug(d_debug, "Dump Table Key", k)
       self:DumpTable(v)
     else
       -- Print the value to the console
@@ -228,7 +239,7 @@ function MythicPlusGroupHelper:ChatCommand(arg)
     -- Run the invite function
     self:InviteGuildToRaid()
   -- If the message is "sort"
-  elseif arg == "sort" or arg == "s" then
+  elseif arg == "sort" then
     -- Run the sort function
     self:SortRaidByRoleAndRating()
   elseif arg == "send" then
@@ -236,6 +247,8 @@ function MythicPlusGroupHelper:ChatCommand(arg)
     self.isFormingGroup = false
     self:Debug(d_debug, "isFormingGroup: ", arg, tostring(self.isFormingGroup))
   -- Otherwise
+  elseif arg == "show" or arg == "s" then
+    self:Show()
   else
     -- Print a usage message
     self:Debug(d_warn, "Use /mpgh help for available options")
@@ -250,6 +263,81 @@ function MythicPlusGroupHelper:OnDisable()
 	self:UnregisterEvent("GROUP_JOINED")
 end
 
-function MythicPlusGroupHelper:Test()
-  self:Debug(d_debug, "Test")
+function MythicPlusGroupHelper:Show()
+  self:Debug(d_debug, "Show")
+  local mainContainer = AceGUI:Create("Frame")
+  local buttonContainer = AceGUI:Create("SimpleGroup")
+  local rosterContainer = AceGUI:Create("InlineGroup")
+  
+  mainContainer:SetLayout("List")
+  mainContainer:SetTitle("Mythic Plus Group Helper")
+  -- mainContainer:SetStatusText("Test")
+  mainContainer:SetCallback("OnClose", function(widget) AceGUI:Release(widget) end)
+  rosterContainer:SetFullWidth(true)
+  buttonContainer:SetFullWidth(true)
+  buttonContainer:SetLayout("Flow")
+
+  for _,k in ipairs(self:GetRaidMembers()) do
+    local name = k[1]
+    local class = k[2]
+    local role = k[3]
+    local rating = k[4]
+    self:Debug(d_debug, "roster", name, class, role)
+    local label = AceGUI:Create("InteractiveLabel")
+    label:SetText(name.." "..class.." ("..rating..")")
+    label:SetCallback("OnClick", function(button)
+      self:Debug(d_debug, "click")
+    end)
+    rosterContainer:AddChild(label)
+  end
+
+  local buttons = self:GetUIButtons(buttonContainer)
+
+  for _,v in ipairs(buttons) do
+    v:SetRelativeWidth(1/#buttons)
+    buttonContainer:AddChild(v)
+  end
+
+  mainContainer:AddChild(buttonContainer)
+  mainContainer:AddChild(rosterContainer)
+end
+
+function MythicPlusGroupHelper:GetRaidMembers()
+  local members = {}
+  for i=1, GetNumGroupMembers() do
+    local name = select(1, GetRaidRosterInfo(i))
+    local class = select(5, GetRaidRosterInfo(i))
+    local role = select(12, GetRaidRosterInfo(i))
+    local rating = self:GetMythicRating(name)
+    self:Debug(d_debug, "GetRaidMembers", name, class, role)
+    members[i] = { name, class, role, rating }
+  end
+  return members
+end
+
+function MythicPlusGroupHelper:GetUIButtons(container)
+  local inviteButton = AceGUI:Create("Button")
+  inviteButton:SetText("Invite")
+  inviteButton:SetCallback("OnClick", function() self:InviteGuildToRaid() end)
+
+  local sortButton = AceGUI:Create("Button")
+  sortButton:SetText("Sort Groups")
+  sortButton:SetCallback("OnClick", function() self:SortRaidByRoleAndRating() end)
+  
+  local sendButton = AceGUI:Create("Button")
+  sendButton:SetText("Send Groups")
+  sendButton:SetCallback("OnClick", function() self:Debug(d_warn, "Send not implemented yet") end)
+
+  local reloadButton = AceGUI:Create("Button")
+  reloadButton:SetText("Reload")
+  reloadButton:SetCallback("OnClick", ReloadUI)
+
+  local buttons = {
+    inviteButton,
+    sortButton,
+    sendButton,
+    reloadButton
+  }
+
+  return buttons
 end
