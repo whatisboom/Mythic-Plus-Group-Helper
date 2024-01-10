@@ -316,6 +316,12 @@ function MythicPlusGroupHelper:GetRosterUI(container)
   end
 end
 
+function MythicPlusGroupHelper:GetRosterGroups(container)
+  -- get roster info
+  -- figure out which has more tanks or healers or maybe dps/3 tank || heal 
+  -- return containers for each
+end
+
 function MythicPlusGroupHelper:GetUIButtons(container, rosterContainer)
   local inviteButton = AceGUI:Create("Button")
   inviteButton:SetText("Invite")
