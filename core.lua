@@ -176,7 +176,7 @@ end
 
 function MythicPlusGroupHelper:GetMythicRating(name, realm, faction)
   if not RaiderIO then
-    self:Debug(d_warn, "Please insteall the raider.io addon")
+    self:Debug(d_warn, "Please install the raider.io addon: ", "https://www.curseforge.com/wow/addons/raiderio")
     return 0
   end
   local profile = RaiderIO.GetProfile(name, realm, faction)
@@ -218,10 +218,11 @@ function MythicPlusGroupHelper:ChatCommand(arg)
   if (arg == "help") then
     self:Print("Usage: /mpgh or /mm + <command>")
     self:Print("Currently supported commands:")
+    self:Print("'show' or 's' will show the group/raid UI with buttons to activate other commands")
     self:Print("'invite' or 'i' will invite all max level guild members to a raid group")
-    self:Print("'sort' or 's' will execute an algorithm to define groups with 1 tank, 1 healer, and 3 dps (as available) that have similar Mythic+ ratings")
-    self:Print("'send' will finalize the groups after an adjustments are made and announce who is together")
+    self:Print("'sort' will execute an algorithm to define groups with 1 tank, 1 healer, and 3 dps (as available) that have similar Mythic+ ratings")
     self:Print("Features to be implemented:")
+    self:Print("'send' will finalize the groups after an adjustments are made and announce who is together")
     self:Print("Defining which key each group will be running")
     self:Print("Adding information to the raid roster to facilitate group management")
     return
@@ -271,27 +272,14 @@ function MythicPlusGroupHelper:Show()
   
   mainContainer:SetLayout("List")
   mainContainer:SetTitle("Mythic Plus Group Helper")
-  -- mainContainer:SetStatusText("Test")
   mainContainer:SetCallback("OnClose", function(widget) AceGUI:Release(widget) end)
   rosterContainer:SetFullWidth(true)
   buttonContainer:SetFullWidth(true)
   buttonContainer:SetLayout("Flow")
 
-  for _,k in ipairs(self:GetRaidMembers()) do
-    local name = k[1]
-    local class = k[2]
-    local role = k[3]
-    local rating = k[4]
-    self:Debug(d_debug, "roster", name, class, role)
-    local label = AceGUI:Create("InteractiveLabel")
-    label:SetText(name.." "..class.." ("..rating..")")
-    label:SetCallback("OnClick", function(button)
-      self:Debug(d_debug, "click")
-    end)
-    rosterContainer:AddChild(label)
-  end
+  self:GetRosterUI(rosterContainer)
 
-  local buttons = self:GetUIButtons(buttonContainer)
+  local buttons = self:GetUIButtons(buttonContainer, rosterContainer)
 
   for _,v in ipairs(buttons) do
     v:SetRelativeWidth(1/#buttons)
@@ -315,7 +303,20 @@ function MythicPlusGroupHelper:GetRaidMembers()
   return members
 end
 
-function MythicPlusGroupHelper:GetUIButtons(container)
+function MythicPlusGroupHelper:GetRosterUI(container)
+  for _,k in ipairs(self:GetRaidMembers()) do
+    local name, class, role, rating = self:UnpackTable(k)
+    self:Debug(d_debug, "roster", name, class, role)
+    local label = AceGUI:Create("InteractiveLabel")
+    label:SetText(name.." "..class.." ("..rating..")")
+    label:SetCallback("OnClick", function(button)
+      self:Debug(d_debug, "click")
+    end)
+    container:AddChild(label)
+  end
+end
+
+function MythicPlusGroupHelper:GetUIButtons(container, rosterContainer)
   local inviteButton = AceGUI:Create("Button")
   inviteButton:SetText("Invite")
   inviteButton:SetCallback("OnClick", function() self:InviteGuildToRaid() end)
@@ -328,6 +329,10 @@ function MythicPlusGroupHelper:GetUIButtons(container)
   sendButton:SetText("Send Groups")
   sendButton:SetCallback("OnClick", function() self:Debug(d_warn, "Send not implemented yet") end)
 
+  local refreshRosterButton = AceGUI:Create("Button")
+  refreshRosterButton:SetText("Refresh Roster")
+  refreshRosterButton:SetCallback("OnClick", function() rosterContainer:DoLayout() end)
+
   local reloadButton = AceGUI:Create("Button")
   reloadButton:SetText("Reload")
   reloadButton:SetCallback("OnClick", ReloadUI)
@@ -336,8 +341,13 @@ function MythicPlusGroupHelper:GetUIButtons(container)
     inviteButton,
     sortButton,
     sendButton,
+    refreshRosterButton,
     reloadButton
   }
 
   return buttons
+end
+
+function MythicPlusGroupHelper:UnpackTable(table)
+  return unpack(table)
 end
