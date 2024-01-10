@@ -10,12 +10,16 @@ MythicPlusGroupHelper.ConvertToRaidTimer = nil
 local MAX_PLAYER_LEVEL = MAX_PLAYER_LEVEL
 
 -- local constants
+local isDebug = true
 local d_warn = 1
 local d_info = 2
 local d_notice = 3
 local d_debug = 4
-local debugLevel = d_debug
-local isDebug = true
+local debugLevel = d_info
+
+if isDebug then
+  debugLevel = d_debug
+end
 
 local TANK = "TANK"
 local DPS = "DAMAGER"
@@ -55,12 +59,25 @@ function MythicPlusGroupHelper:InviteGuildToRaid()
     local name, _ , _, level, _, _, _, _, online, _, class = GetGuildRosterInfo(i)
     -- If the guild member is online and not the player
     if online and name ~= UnitName("player") and level == MAX_PLAYER_LEVEL then
+      self:Debug(d_debug, "Starting check for ".. name)
+      for j = 1, GetNumGroupMembers() do
+        local nameInRaid = GetRaidRosterInfo(j)
+        self:Debug(d_debug,"Current character in raid: " ..nameInRaid)
+        local isMatch = string.sub(name, 1, #nameInRaid)==nameInRaid
+        -- If the player is already in the raid
+        -- Should probably just register a roster change event and store a local cache but we will see how performance is
+        if isMatch then
+          self:Debug(d_debug, "Not inviting "..name.." as they are already in the group")
+          return
+        end
+      end
       -- Invite the guild member to the raid
-      if not isDebug then
+      if isDebug then
+        -- Print a message to the chat
+        self:Debug(d_debug, "Inviting " .. name .. " (" .. class .. ") to the raid")
+      else
         C_PartyInfo.InviteUnit(name)
       end
-        -- Print a message to the chat
-      self:Debug(d_info, "Inviting " .. name .. " (" .. class .. ") to the raid")
     end
   end
 end
